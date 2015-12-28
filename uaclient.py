@@ -92,7 +92,7 @@ if __name__ == "__main__":
     user = DIC_CONFIG['account']['username']
     ip_user = DIC_CONFIG['uaserver']['ip']
     puerto_ua = DIC_CONFIG['uaserver']['puerto']
-    dir_SIP = user + '@' + ip_user + ":" + puerto_ua
+    dir_SIP_c = user + '@' + ip_user + ":" + puerto_ua
     passwd = DIC_CONFIG['account']['passwd']
 
     """------------
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     ------------"""
     if METODO == 'REGISTER':
         t_exp = 'Expires: ' + OPCION
-        peticion = (METODO + ' sip:' + dir_SIP + ' SIP/2.0' + '\r\n' + t_exp)
+        peticion = (METODO + ' sip:' + dir_SIP_c + ' SIP/2.0' + '\r\n' + t_exp)
         my_socket.send(bytes(peticion, 'utf-8'))
         # ENVIADA peticion
         print("\n")
@@ -121,7 +121,7 @@ if __name__ == "__main__":
                 mc = hashlib.md5()
                 mc.update(bytes(passwd, 'utf-8') + bytes(nonce, 'utf-8'))
                 response = mc.hexdigest()
-                respuesta = METODO + ' sip:' + dir_SIP + ' SIP/2.0' + '\r\n' + t_exp
+                respuesta = METODO + ' sip:' + dir_SIP_c + ' SIP/2.0' + '\r\n' + t_exp
                 respuesta += '\r\nAuthorization: response="' + response
                 respuesta += '" nonce="' + nonce + '"'
                 my_socket.send(bytes(respuesta, 'utf-8'))
@@ -165,11 +165,39 @@ if __name__ == "__main__":
             cliente.add_log(otros, 0, 0, 0, 1)
 
     elif METODO == "INVITE":
-        pass
+        dir_SIP_dest = OPCION
+        puerto_c_RTP = DIC_CONFIG['rtpaudio']['puerto']
+        peticion = "INVITE sip:" + dir_SIP_dest + " SIP/2.0\r\n"
+        peticion += "Content-Type: application/sdp\r\n\r\n"
+        peticion += "v=0\no=" + dir_SIP_c + "\ns=myWOD\nt=0\nm=audio "
+        peticion += puerto_c_RTP + " RTP"
+        # envio el INVITE al proxy
+        cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
+        my_socket.send(bytes(peticion, 'utf-8'))
+        resp = my_socket.recv(1024)
+
+        # si 200ok => envio ACK
+        # else => fin
+
     elif METODO == "BYE":
-        pass
+        # tras el envio RTP envio el BYE
+        print("\n")
+        dir_SIP_dest = OPCION
+        peticion = (METODO + ' sip:' + dir_SIP_dest + ' SIP/2.0' + '\r\n\r\n')
+        peticion += "o=" + dir_SIP_c
+        # envio el BYE
+        my_socket.send(bytes(peticion, 'utf-8'))
+        cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
+        # espero a recibir la respuesta del BYE
+        respuesta = my_socket.recv(1024)
+        respuesta = respuesta.decode('utf-8')
+        # si 200ok => Fin
+        # else => reenvio BYE
+
+
+
     else:
-        peticion = (METODO + ' sip:' + dir_SIP + ' SIP/2.0' + '\r\n')
+        peticion = (METODO + ' sip:' + dir_SIP_c + ' SIP/2.0' + '\r\n')
         my_socket.send(bytes(peticion, 'utf-8'))
         # ENVIADA peticion con metodo desconocido
         cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
