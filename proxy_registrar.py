@@ -9,7 +9,8 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 import random
-
+import hashlib
+import socket
 
 
 def get_configuracion(fichero):
@@ -69,7 +70,52 @@ class Proxy_Server():
         fich = open(path, "a")
         info_user = dir + " - " + hora + " - " + t_exp
         fich.write(info_user + "\n")
-        print("***usuario guardado en database")
+
+
+    def check_client(self, dir_SIP, nonce, response_rx):
+        """
+        Calculamos response_proxy y lo comparamos con response_rx
+        """
+        # vamos al fichero de passwords y obtenemos el passwd asociado a
+        # la dir_SIP que queremos comprobar
+        path = DIC_CONFIG['database']['passwdpath']
+        fich = open(path, 'r')
+        lineas = fich.readlines()
+        encontrado = False
+        # buscamos al usuario en fichero passwords
+        for linea in lineas:
+            if dir_SIP in linea:
+                password = linea.split("passwd: ")[1][:-1]
+                encontrado = True
+
+        if encontrado == True:
+            #calculamos response
+            m = hashlib.md5()
+            m.update(bytes(password, 'utf-8') + bytes(nonce, 'utf-8'))
+            response_proxy = m.hexdigest()
+
+            if response_proxy == response_rx:
+                # cliente admitido
+                admitido = True
+                print("* Usuario autenticado: " + dir_SIP + "\n")
+            else:
+                admitido = False
+        else:
+            admitido = False
+        return admitido
+
+
+    def send_to_uaserver(self, mensaje, ip_uaserver, puerto_uaserver):
+
+        # Creamos el socket, y lo atamos a un servidor/puerto del uaserver_dest
+        my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        my_socket.connect((ip_uaserver, int(puerto_uaserver)))
+
+        # enviamos el mensaje al ua_server_destino
+        my_socket.send(bytes(mensaje, 'utf-8'))
+
+    #def send_to_uaclient(self, mensaje, ip_uaclient, puerto_uaclient)
 
 
 class UDP_Server(socketserver.DatagramRequestHandler):
@@ -93,7 +139,9 @@ class UDP_Server(socketserver.DatagramRequestHandler):
             corte = mensaje_rx.split(":")[2]
             puerto_c = corte.split(" ")[0]
             dir_SIP_c = mensaje_rx.split(":")[1] + ":" + puerto_c
-
+            """
+            REGISTER
+            """
             if tipo_mensaje == "REGISTER":
                 # RECIBIDO register
                 proxy.add_log(mensaje_rx, ip_c, puerto_c, 1, 0)
@@ -108,11 +156,10 @@ class UDP_Server(socketserver.DatagramRequestHandler):
                     proxy.add_log(respuesta, ip_c, puerto_c, 0, 0)
                 else:
                     # hemos recibido el response, comprobamos autenticidad
-                    print("* Debemos comprobar autenticidad del cliente\n")
-                    # *** de momento suponemos que se acepta al cliente!
+                    nonce = mensaje_rx.split('"')[3]
+                    response_rx = mensaje_rx.split('"')[1]
+                    find = proxy.check_client(dir_SIP_c, nonce, response_rx)
 
-                    # proxy.find_client(pasw, nonce, response)
-                    find = True
                     if find == True:
                         # usuario aceptado
                         respuesta = "SIP/2.0 200 OK\r\n"
@@ -130,17 +177,71 @@ class UDP_Server(socketserver.DatagramRequestHandler):
 
 
             elif tipo_mensaje == "INVITE":
-                # traza
-                print("Recibido " + mensaje_rx)
+                # RECIBIDO INVITE
+                # extraigo dir_SIP_destino
+                dir_SIP_dest = mensaje_rx.split(" ")[1]
+                ip_dest = dir_SIP_dest.split("@")[1]
+                ip_dest = ip_dest.split(":")[0]
+                puerto_dest = dir_SIP_dest.split(":")[2]
+                # extraigo ip y puerto origen del INVITE
+                corte = mensaje_rx.split("o=")[1]
+                corte = corte.split("s")[0]
+                ip_puerto = corte.split("@")[1]
+                ip_o = ip_puerto.split(":")[0]
+                puerto_o = ip_puerto.split(":")[1][:-1]
+                proxy.add_log(mensaje_rx, ip_o, puerto_o, 1, 0)
+                # debo enviar al uaserver deseado
+                mensaje_tx = mensaje_rx
+                proxy.send_to_uaserver(mensaje_tx, ip_dest, puerto_dest)
+                proxy.add_log(mensaje_tx, ip_dest, puerto_dest, 0, 0)
+
+                # espero a recibir confirmacion del INVITE
+
+
 
             elif tipo_mensaje == "BYE":
-                # traza
-                print("Recibido " + mensaje_rx)
+                # extraigo dir_SIP_dest
+                dir_SIP_dest = mensaje_rx.split(":")[1]
+                ip_dest = dir_SIP_dest.split("@")[1]
+                puerto_dest = mensaje_rx.split(":")[2]
+                puerto_dest = puerto_dest.split(" ")[0]
+                # extraigo ip y puerto origen del INVITE
+                corte = mensaje_rx.split("o=")[1]
+                corte = corte.split("s")[0]
+                ip_puerto = corte.split("@")[1]
+                ip_o = ip_puerto.split(":")[0]
+                puerto_o = ip_puerto.split(":")[1]
+                proxy.add_log(mensaje_rx, ip_o, puerto_o, 1, 0)
+                # debo enviar al uaserver deseado
+                mensaje_tx = mensaje_rx
+                proxy.send_to_uaserver(mensaje_tx, ip_dest, puerto_dest)
+                proxy.add_log(mensaje_tx, ip_dest, puerto_dest, 0, 0)
+
+
             else:
-                respuesta = "SIP/2.0 405 Method Not Allowed\r\n\r\n"
-                self.wfile.write(bytes(respuesta, 'utf-8'))
-                # ENVIO mensaje
-                proxy.add_log(respuesta, ip_c, puerto_c, 0, 0)
+
+                if "200 OK" in mensaje_rx:
+
+                    print("*Recibido 200 OK")
+                    # recibida confirmacion del destinatario del INVITE
+                    proxy.add_log(mensaje_rx, 0, 0, 0, 1)
+                    # extraigo info del nuevo destinatario
+                    dir_SIP_dest = mensaje_rx.split("d=")[1]
+                    dir_SIP_dest = dir_SIP_dest.split("s=")[0][:-1]
+                    ip_puerto = dir_SIP_dest.split("@")[1]
+                    ip_dest = ip_puerto.split(":")[0]
+                    puerto_dest = ip_puerto.split(":")[1]
+
+                    # reenvio en 200 OK al uaclient que envió el INVITE
+                    proxy.send_to_uaserver(mensaje_rx, ip_dest, puerto_dest)
+                    #self.wfile.write(bytes(mensaje_rx, 'utf-8'))
+                    proxy.add_log(mensaje_rx, ip_dest, puerto_dest, 0, 0)
+
+                else:
+                    respuesta = "SIP/2.0 405 Method Not Allowed\r\n\r\n"
+                    self.wfile.write(bytes(respuesta, 'utf-8'))
+                    # ENVIO mensaje
+                    proxy.add_log(respuesta, ip_c, puerto_c, 0, 0)
 
 
 
