@@ -8,6 +8,7 @@ import socket
 import sys
 import os
 import xml.etree.ElementTree as ET
+import time
 
 
 
@@ -37,130 +38,98 @@ except IndexError:
 
 
 
-
-
 class EchoHandler(socketserver.DatagramRequestHandler):
     """
     Clase servidor
     """
 
-    def send_RTP(self, dir_SIP_dest):
-        """
-        Gestion del envio de paquetes RTP: envio el paquete al cliente
-        """
-        ip_puerto = dir_SIP_dest.split("@")[1]
-        ip = dir_SIP_dest.split(":")[0]
-        ip = ip.split("@")[1]
-        puerto = dir_SIP_dest.split(":")[1]
-        audio = DIC_CONFIG['audio']['path']
+    def add_log(self, contenido, ip, puerto, bool_recibido, bool_otros):
 
-        # envio RTP
-        paquete_RTP = ('./mp32rtp -i ' + ip + ' -p ' + puerto + ' < '
-                       + audio)
-        print("Enviando paquete RTP...\n")
-        os.system(paquete_RTP)
+        path = DIC_CONFIG['log']['path']
+        if bool_recibido == 1:
+            tipo_log = "Received from " + ip + ":" + puerto + " "
+            print("-----" + tipo_log + "\n" + contenido + "\n")
+        elif bool_recibido == 0 and bool_otros == 0:
+            tipo_log = "Send to " + ip + ":" + puerto + " "
+            print("-----" + tipo_log + "\n" + contenido + "\n")
+        elif bool_otros == 1:
+            tipo_log = ""
+            print("-----" + contenido + "\n")
+        else:
+            print("Argumentos recibidos por add_log mal puestos")
 
-
-    def send_ACK(self, dir_SIP_dest):
-
-        ip_puerto = dir_SIP_dest.split("@")[1]
-        ip = dir_SIP_dest.split(":")[0]
-        ip = ip.split("@")[1]
-        puerto = dir_SIP_dest.split(":")[1]
-
-        my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        my_socket.connect((ip, int(puerto)))
-
-        ack = "ACK sip:" + dir_SIP_dest + " SIP/2.0\r\n"
-        my_socket.send(bytes(ack, 'utf-8'))
-        print("Enviado: " + ack)
-
+        tipo_log += contenido
+        hora = str(time.strftime("%Y%m%d%H%M%S", time.gmtime()))
+        log_contenido = tipo_log.split('\r\n')
+        ' '.join(log_contenido)
+        fich = open(path, "a")
+        fich.write(hora + ' ' + log_contenido[0] + "\n")
 
 
 
     def handle(self):
+
+        ip_proxy = DIC_CONFIG['regproxy']['ip']
+        puerto_proxy = DIC_CONFIG['regproxy']['puerto']
+        my_ip = DIC_CONFIG['uaserver']['ip']
+        my_puerto = DIC_CONFIG['uaserver']['puerto']
+        my_name = DIC_CONFIG['account']['username']
+        my_dir_SIP = my_name + "@" + my_ip + ":" + my_puerto
         while 1:
 
-            ip_proxy = DIC_CONFIG['regproxy']['ip']
-            puerto_proxy = DIC_CONFIG['regproxy']['puerto']
-            # Creamos el socket, lo configuramos y lo atamos a un servidor/puerto
-            my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            my_socket.connect((ip_proxy, int(puerto_proxy)))
-
-            mensaje_rx = self.rfile.read()
+            line = self.rfile.read()
             #controlamos el mensaje que se reenvia vacio
-            if not mensaje_rx:
+            if not line:
                 break
-            # Leyendo línea a línea lo que nos envía el cliente
-            mensaje_rx = mensaje_rx.decode('utf-8')
-            print("Recibido: " + mensaje_rx + "\n")
+
+            mensaje_rx = line.decode('utf-8')
             METODO = mensaje_rx.split(" ")[0]
 
             if METODO == "INVITE":
+                self.add_log(mensaje_rx, ip_proxy, puerto_proxy, 1, 0)
                 # envio 200 ok al proxy
-                dir_SIP_dest = mensaje_rx.split("o=")[1]
-                dir_SIP_dest = dir_SIP_dest.split("s=")[0][:-1]
                 dir_SIP_o = mensaje_rx.split(" ")[1]
                 dir_SIP_o = dir_SIP_o.split("sip:")[1]
                 puerto_o_RTP = DIC_CONFIG['rtpaudio']['puerto']
-                print(dir_SIP_dest, dir_SIP_o)
 
                 respuesta = "SIP/2.0 100 Trying\r\n\r\n"
                 respuesta += "SIP/2.0 180 Ring\r\n\r\n"
                 respuesta += "SIP/2.0 200 OK\r\nContent-Type: "
                 respuesta +=  "application/sdp\r\n\r\n"
-                respuesta += "v=0\no=" + dir_SIP_o + "\nd=" + dir_SIP_dest
+                respuesta += "v=0\no=" + dir_SIP_o #+ "\nd=" + dir_SIP_dest
                 respuesta += "\ns=myWOD\nt=0\nm=audio "
                 respuesta += puerto_o_RTP + " RTP"
-                my_socket.send(bytes(respuesta, 'utf-8'))
-                print("Enviado: " + respuesta + "\n")
+                #self.send_to_proxy(respuesta)
+                self.wfile.write(bytes(respuesta, 'utf-8'))
+                self.add_log(respuesta, ip_proxy, puerto_proxy, 0, 0)
 
-            if METODO == "BYE":
-                print("Recibido BYE en uaserver")
+            elif METODO == "BYE":
+                print("Recibido: " + mensaje_rx + "\n")
+                puerto_o_RTP = DIC_CONFIG['rtpaudio']['puerto']
+
+                # debo enviar el 200 OK
+                # >>>>>>>>> prepare_200_OK <<<<<<<<<
+                respuesta = "SIP/2.0 200 OK\r\nContent-Type: "
+                respuesta +=  "application/sdp\r\n\r\n"
+                respuesta += "o=" + my_dir_SIP + "\r\n"
+
+                # envio el 200 OK
+                self.wfile.write(bytes(respuesta, 'utf-8'))
+                self.add_log(respuesta, ip_proxy, puerto_proxy, 0, 0)
+
+                fin = "Connection Finished"
+                self.add_log(fin, 0, 0, 0, 1)
+
+            elif METODO == "ACK":
+                self.add_log(mensaje_rx, ip_proxy, puerto_proxy, 1, 0)
+                print("...Waiting audio by RTP")
+
 
             else:
-                if "200 OK" in mensaje_rx:
-                    # enviamos ACK al destinatario directamente
-                    ip_puerto = mensaje_rx.split("o=")[1]
-                    dir_SIP_dest = ip_puerto.split("d=")[0][:-1]
-                    # envio ack
-                    self.send_ACK(dir_SIP_dest)
-                    # envio RTP
-                    self.send
+                print("Recibido mensaje no esperado: " + mensaje_rx)
 
 
 
-                """
-                #extraigo: tipo_peticion, dir_SIP_cliente_ y dir_IP_cliente
-                peticion_cliente = line.split(' sip:')[0]
-                recorte = line.split(":")[-1]
-                dir_SIP_cliente = recorte.split(" SIP/2.0")[0]
-                IP_cliente = dir_SIP_cliente.split('@')[-1]
-
-                print("Recibido: " + line.split('\r')[0] + '\n')
-                respuesta = b''
-                if peticion_cliente == 'INVITE':
-                    respuesta = self.setcode_200()
-                    self.wfile.write(bytes(respuesta, 'utf-8'))
-
-                elif peticion_cliente == 'BYE':
-                    #le devuelvo 200OK
-                    respuesta = 'SIP/2.0 200 OK\r\n\r\n'
-                    self.wfile.write(bytes(respuesta, 'utf-8'))
-                    print(dir_SIP_cliente + " ha cerrado la conexion\n")
-
-                elif peticion_cliente == 'ACK':
-                    #envio el paquete RTP, e imprimo que lo he enviado
-                    respuesta = self.envio_RTP()
-                    self.wfile.write(bytes(respuesta, 'utf-8'))
-
-                else:
-                    #metodo no admitido
-                    respuesta = self.setcode_405()
-                    self.wfile.write(bytes(respuesta, 'utf-8'))
-                """
 
 if __name__ == "__main__":
 
