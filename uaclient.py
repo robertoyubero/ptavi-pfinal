@@ -209,11 +209,15 @@ if __name__ == "__main__":
         # espero la respuesta del proxy
         respuesta = my_socket.recv(1024)
         respuesta = respuesta.decode('utf-8')
-        cliente.add_log(respuesta, ip_proxy, puerto_proxy, 1, 0)
-        # mensaje de fin de conexion
-        usuario = respuesta.split("o=")[1][:-1]
-        fin = "Conection Finished with: " + usuario
-        cliente.add_log(fin, 0, 0, 0, 1)
+        if "200 OK" in respuesta:
+            cliente.add_log(respuesta, ip_proxy, puerto_proxy, 1, 0)
+            # mensaje de fin de conexion
+            usuario = respuesta.split("o=")[1][:-1]
+            fin = "Conection Finished with: " + usuario
+            cliente.add_log(fin, 0, 0, 0, 1)
+        else:
+            # respuesta errónea
+            cliente.add_log(respuesta, 0, 0, 0, 1)    
 
     else:
         peticion = (METODO + ' sip:' + dir_SIP_c + ' SIP/2.0' + '\r\n')
