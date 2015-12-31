@@ -67,13 +67,23 @@ class Cliente():
         fich.write(hora + ' ' + log_contenido[0] + "\n")
 
 
-    """
-    def get_peticion(self, tipo_peticion):
-        if tipo_peticion in self.metodos_sip:
-            return tipo_peticion
-        else:
-            print("Tipo de petición no aceptada")
-    """
+    def send_RTP(self, dir_SIP_dest):
+        """
+        Gestion del envio de paquetes RTP: envio el paquete al cliente
+        """
+        ip_puerto = dir_SIP_dest.split("@")[1]
+        ip = dir_SIP_dest.split(":")[0]
+        ip = ip.split("@")[1]
+        puerto = dir_SIP_dest.split(":")[1]
+        audio = DIC_CONFIG['audio']['path']
+
+        # envio RTP
+        paquete_RTP = ('./mp32rtp -i ' + ip + ' -p ' + puerto + ' < '
+                       + audio)
+        print("Enviando paquete RTP...\n")
+        os.system(paquete_RTP)
+
+
 
 if __name__ == "__main__":
 
@@ -157,16 +167,19 @@ if __name__ == "__main__":
                 cliente.add(otros, 0, 0, 0, 1)
                 my_socket.close()
 
-
         except ConnectionRefusedError:
             # traza
             otros = "ERROR: No server listening at " + ip_proxy + ":"
             otros += puerto_proxy
             cliente.add_log(otros, 0, 0, 0, 1)
 
+
     elif METODO == "INVITE":
+
+
         dir_SIP_dest = OPCION
         puerto_c_RTP = DIC_CONFIG['rtpaudio']['puerto']
+        # creo la peticion de INVITE
         peticion = "INVITE sip:" + dir_SIP_dest + " SIP/2.0\r\n"
         peticion += "Content-Type: application/sdp\r\n\r\n"
         peticion += "v=0\no=" + dir_SIP_c + "\ns=myWOD\nt=0\nm=audio "
@@ -174,26 +187,37 @@ if __name__ == "__main__":
         # envio el INVITE al proxy
         cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
         my_socket.send(bytes(peticion, 'utf-8'))
-        resp = my_socket.recv(1024)
 
-        # si 200ok => envio ACK
-        # else => fin
-
-    elif METODO == "BYE":
-        # tras el envio RTP envio el BYE
-        print("\n")
-        dir_SIP_dest = OPCION
-        peticion = (METODO + ' sip:' + dir_SIP_dest + ' SIP/2.0' + '\r\n\r\n')
-        peticion += "o=" + dir_SIP_c
-        # envio el BYE
-        my_socket.send(bytes(peticion, 'utf-8'))
-        cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
-        # espero a recibir la respuesta del BYE
+        # espero la respuesta del proxy
         respuesta = my_socket.recv(1024)
         respuesta = respuesta.decode('utf-8')
-        # si 200ok => Fin
-        # else => reenvio BYE
+        cliente.add_log(respuesta, ip_proxy, puerto_proxy, 1, 0)
 
+        # si recibo 200 OK envio ACK y audio con RTP
+        if "200 OK" in respuesta:
+            # envio ACK
+            peticion = "ACK sip:" + dir_SIP_dest +" SIP/2.0"
+            my_socket.send(bytes(peticion, 'utf-8'))
+            cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
+            # envio RTP
+            print("...Enviar RTP...")
+
+        else:
+            print("Recibida respuesta eeronea al INVITE: " + respuesta)
+
+    elif METODO == "BYE":
+        # envio BYE y espero confirmacion
+        peticion = "BYE sip:" + OPCION +" SIP/2.0"
+        my_socket.send(bytes(peticion, 'utf-8'))
+        cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
+        # espero la respuesta del proxy
+        respuesta = my_socket.recv(1024)
+        respuesta = respuesta.decode('utf-8')
+        cliente.add_log(respuesta, ip_proxy, puerto_proxy, 1, 0)
+        # mensaje de fin de conexion
+        usuario = respuesta.split("o=")[1][:-1]
+        fin = "Conection Finished with: " + usuario
+        cliente.add_log(fin, 0, 0, 0, 1)
 
 
     else:
@@ -207,49 +231,28 @@ if __name__ == "__main__":
         my_socket.close()
 
 
-    # Cerramos todo
     my_socket.close()
 
 
-"""
-    elif METODO == "INVITE":
-        #envio INVITE
-        peticion = (peticion + ' sip:' + dir_SIP + ' SIP/2.0' + '\r\n')
-        my_socket.send(bytes(peticion, 'utf-8'))
-        print("\nEnviado: " + peticion)
 
-        #espero a recibir la aceptacion del INVITE
-        respuesta = my_socket.recv(1024)
-        respuesta = respuesta.decode('utf-8')
-        codigo = int(respuesta.split('SIP/2.0 ')[-1][0:3])
-
-        if codigo != 200:
-            #mi peticion ha sido denegada
-            print(respuesta)
-            # Cerramos conexion
-            my_socket.close()
-        else:
-            print('Recibido:')
-            print(respuesta)
-            #envio ACK para comenzar a recibir RTP
-            peticion_ACK = ('ACK sip:' + dir_SIP + ' SIP/2.0' + '\r\n')
-            my_socket.send(bytes(peticion_ACK, 'utf-8'))
-            print('Enviado: ' + peticion_ACK)
-        my_socket.close()
-
-    elif METODO == "BYE":
-        #envio BYE
-        peticion_BYE = (peticion + ' sip:' + dir_SIP + ' SIP/2.0' + '\r\n')
-        my_socket.send(bytes(peticion_BYE, 'utf-8'))
-        print('Enviado: ' + peticion_BYE)
-        #espero la respuesta...
-        respuesta = my_socket.recv(1024)
-        print("Recibido: " + respuesta.decode('utf-8'))
-        print("Cerramos la sesion SIP\n")
-        my_socket.close()
-    else:
-        print('Intento de envio de: ' + peticion)
-        my_socket.close()
+    """
+if METODO == "BYE":
 
 
-"""
+    # tras el envio RTP envio el BYE
+    print("\n")
+    dir_SIP_dest = OPCION
+    peticion = (METODO + ' sip:' + dir_SIP_dest + ' SIP/2.0' + '\r\n\r\n')
+    peticion += "o=" + dir_SIP_c
+    # envio el BYE
+    my_socket.send(bytes(peticion, 'utf-8'))
+    print("9")
+    cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
+    # espero a recibir la respuesta del BYE
+    respuesta = my_socket.recv(1024)
+    respuesta = respuesta.decode('utf-8')
+    # si 200ok => Fin
+    # else => reenvio BYE
+    """
+
+    # Cerramos todo
