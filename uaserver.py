@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+# !/usr/bin/python3
 # -*- coding: utf-8 -*-
 """
 Clase (y programa principal) para un servidor de eco en UDP simple
@@ -11,8 +11,6 @@ import xml.etree.ElementTree as ET
 import time
 
 
-
-
 def get_configuracion(fichero):
     """
     Extraigo los datos del fichero de configuracion
@@ -21,12 +19,12 @@ def get_configuracion(fichero):
     tree = ET.parse(fichero)
     root = tree.getroot()
     for child in root:
-        clave =child.tag
+        clave = child.tag
         valor = child.attrib
         dicc[clave] = valor
     return dicc
 
-#comprobamos la entrada por teclado
+# comprobamos la entrada por teclado
 try:
     if len(sys.argv) != 2:
         raise IndexError
@@ -66,8 +64,6 @@ class EchoHandler(socketserver.DatagramRequestHandler):
     """
     Clase servidor
     """
-
-
     def handle(self):
 
         ip_proxy = DIC_CONFIG['regproxy']['ip']
@@ -80,7 +76,7 @@ class EchoHandler(socketserver.DatagramRequestHandler):
         while 1:
 
             line = self.rfile.read()
-            #controlamos el mensaje que se reenvia vacio
+            # controlamos el mensaje que se reenvia vacio
             if not line:
                 break
 
@@ -97,11 +93,11 @@ class EchoHandler(socketserver.DatagramRequestHandler):
                 respuesta = "SIP/2.0 100 Trying\r\n\r\n"
                 respuesta += "SIP/2.0 180 Ring\r\n\r\n"
                 respuesta += "SIP/2.0 200 OK\r\nContent-Type: "
-                respuesta +=  "application/sdp\r\n\r\n"
-                respuesta += "v=0\no=" + dir_SIP_o #+ "\nd=" + dir_SIP_dest
+                respuesta += "application/sdp\r\n\r\n"
+                respuesta += "v=0\no=" + dir_SIP_o
                 respuesta += "\ns=myWOD\nt=0\nm=audio "
                 respuesta += puerto_o_RTP + " RTP"
-                #self.send_to_proxy(respuesta)
+                # self.send_to_proxy(respuesta)
                 self.wfile.write(bytes(respuesta, 'utf-8'))
                 server.add_log(respuesta, ip_proxy, puerto_proxy, 0, 0)
 
@@ -110,9 +106,8 @@ class EchoHandler(socketserver.DatagramRequestHandler):
                 puerto_o_RTP = DIC_CONFIG['rtpaudio']['puerto']
 
                 # debo enviar el 200 OK
-                # >>>>>>>>> prepare_200_OK <<<<<<<<<
                 respuesta = "SIP/2.0 200 OK\r\nContent-Type: "
-                respuesta +=  "application/sdp\r\n\r\n"
+                respuesta += "application/sdp\r\n\r\n"
                 respuesta += "o=" + my_dir_SIP + "\r\n"
 
                 # envio el 200 OK
@@ -126,11 +121,8 @@ class EchoHandler(socketserver.DatagramRequestHandler):
                 server.add_log(mensaje_rx, ip_proxy, puerto_proxy, 1, 0)
                 print("...Waiting audio by RTP")
 
-
             else:
                 print("Recibido mensaje no esperado: " + mensaje_rx)
-
-
 
 
 if __name__ == "__main__":
