@@ -37,11 +37,7 @@ except IndexError:
     print("Usage: python server.py IP port audio_file")
 
 
-
-class EchoHandler(socketserver.DatagramRequestHandler):
-    """
-    Clase servidor
-    """
+class UA_Server():
 
     def add_log(self, contenido, ip, puerto, bool_recibido, bool_otros):
 
@@ -66,6 +62,11 @@ class EchoHandler(socketserver.DatagramRequestHandler):
         fich.write(hora + ' ' + log_contenido[0] + "\n")
 
 
+class EchoHandler(socketserver.DatagramRequestHandler):
+    """
+    Clase servidor
+    """
+
 
     def handle(self):
 
@@ -75,6 +76,7 @@ class EchoHandler(socketserver.DatagramRequestHandler):
         my_puerto = DIC_CONFIG['uaserver']['puerto']
         my_name = DIC_CONFIG['account']['username']
         my_dir_SIP = my_name + "@" + my_ip + ":" + my_puerto
+        server = UA_Server()
         while 1:
 
             line = self.rfile.read()
@@ -86,7 +88,7 @@ class EchoHandler(socketserver.DatagramRequestHandler):
             METODO = mensaje_rx.split(" ")[0]
 
             if METODO == "INVITE":
-                self.add_log(mensaje_rx, ip_proxy, puerto_proxy, 1, 0)
+                server.add_log(mensaje_rx, ip_proxy, puerto_proxy, 1, 0)
                 # envio 200 ok al proxy
                 dir_SIP_o = mensaje_rx.split(" ")[1]
                 dir_SIP_o = dir_SIP_o.split("sip:")[1]
@@ -101,7 +103,7 @@ class EchoHandler(socketserver.DatagramRequestHandler):
                 respuesta += puerto_o_RTP + " RTP"
                 #self.send_to_proxy(respuesta)
                 self.wfile.write(bytes(respuesta, 'utf-8'))
-                self.add_log(respuesta, ip_proxy, puerto_proxy, 0, 0)
+                server.add_log(respuesta, ip_proxy, puerto_proxy, 0, 0)
 
             elif METODO == "BYE":
                 print("Recibido: " + mensaje_rx + "\n")
@@ -115,13 +117,13 @@ class EchoHandler(socketserver.DatagramRequestHandler):
 
                 # envio el 200 OK
                 self.wfile.write(bytes(respuesta, 'utf-8'))
-                self.add_log(respuesta, ip_proxy, puerto_proxy, 0, 0)
+                server.add_log(respuesta, ip_proxy, puerto_proxy, 0, 0)
 
                 fin = "Connection Finished"
-                self.add_log(fin, 0, 0, 0, 1)
+                server.add_log(fin, 0, 0, 0, 1)
 
             elif METODO == "ACK":
-                self.add_log(mensaje_rx, ip_proxy, puerto_proxy, 1, 0)
+                server.add_log(mensaje_rx, ip_proxy, puerto_proxy, 1, 0)
                 print("...Waiting audio by RTP")
 
 
@@ -133,10 +135,11 @@ class EchoHandler(socketserver.DatagramRequestHandler):
 
 if __name__ == "__main__":
 
-
+    uaserver = UA_Server()
     ip_server = DIC_CONFIG['uaserver']['ip']
     puerto_server = DIC_CONFIG['uaserver']['puerto']
     # Nos atamos a puerto de uaserver
     serv = socketserver.UDPServer((ip_server, int(puerto_server)), EchoHandler)
-    print("Listening...\n")
+    otros = "Listening...\n"
+    uaserver.add_log(otros, 0, 0, 0, 1)
     serv.serve_forever()
