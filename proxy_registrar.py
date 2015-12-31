@@ -44,15 +44,19 @@ class Proxy_Server():
     def add_log(self, contenido, ip, puerto, bool_recibido, bool_otros):
 
         path = DIC_CONFIG['log']['path']
-        if bool_recibido == 1:
+        if bool_recibido == 1 and bool_otros == 0:
             tipo_log = "Received from " + ip + ":" + puerto + " "
             print("-----" + tipo_log + "\n" + contenido + "\n")
         elif bool_recibido == 0 and bool_otros == 0:
             tipo_log = "Send to " + ip + ":" + puerto + " "
             print("-----" + tipo_log + "\n" + contenido + "\n")
         elif bool_otros == 1:
+            if bool_recibido == 1:
+                print("-----Received " + contenido + "\n")
+            else:
+
+                print("-----" + contenido + "\n")
             tipo_log = ""
-            print("-----" + contenido + "\n")
         else:
             print("Argumentos recibidos por add_log mal puestos")
 
@@ -62,6 +66,7 @@ class Proxy_Server():
         ' '.join(log_contenido)
         fich = open(path, "a")
         fich.write(hora + ' ' + log_contenido[0] + "\n")
+        fich.close()
 
 
     def add_user(self, dir, t_exp):
@@ -114,8 +119,29 @@ class Proxy_Server():
 
         # enviamos el mensaje al ua_server_destino
         my_socket.send(bytes(mensaje, 'utf-8'))
+        # añado al log
+        self.add_log(mensaje, ip_uaserver, puerto_uaserver, 0, 0)
 
-    #def send_to_uaclient(self, mensaje, ip_uaclient, puerto_uaclient)
+        # esperamos a recibir la respuesta
+        respuesta1 = my_socket.recv(1024)
+
+        # añado al fichero de log
+        self.add_log(respuesta1.decode('utf-8'), ip_uaserver, puerto_uaserver, 1, 0)
+        return (respuesta1)
+
+
+    def ack_to_uaserver(self, mensaje, ip_uaserver, puerto_uaserver):
+
+        # Creamos el socket, y lo atamos a un servidor/puerto del uaserver_dest
+        my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        my_socket.connect((ip_uaserver, int(puerto_uaserver)))
+
+        # enviamos el mensaje al ua_server_destino
+        my_socket.send(bytes(mensaje, 'utf-8'))
+        # añado al log
+        self.add_log(mensaje, ip_uaserver, puerto_uaserver, 0, 0)
+
 
 
 class UDP_Server(socketserver.DatagramRequestHandler):
@@ -133,16 +159,25 @@ class UDP_Server(socketserver.DatagramRequestHandler):
                 break
             mensaje_rx = line.decode('utf-8')
             tipo_mensaje = mensaje_rx.split(' ')[0]
-            # extraido info del cliente que me envia los mensajes
-            corte = mensaje_rx.split(":")[1]
-            ip_c = corte.split("@")[1]
-            corte = mensaje_rx.split(":")[2]
-            puerto_c = corte.split(" ")[0]
-            dir_SIP_c = mensaje_rx.split(":")[1] + ":" + puerto_c
+
+            if tipo_mensaje == 'INVITE' or 'BYE' or 'ACK':
+                # extraigo dir_SIP_destino
+                dir_SIP_dest = mensaje_rx.split(" ")[1]
+                ip_dest = dir_SIP_dest.split("@")[1]
+                ip_dest = ip_dest.split(":")[0]
+                puerto_dest = dir_SIP_dest.split(":")[2]
+
+
             """
             REGISTER
             """
             if tipo_mensaje == "REGISTER":
+                # extraigo info del cliente que me envia los mensajes
+                corte = mensaje_rx.split(":")[1]
+                ip_c = corte.split("@")[1]
+                corte = mensaje_rx.split(":")[2]
+                puerto_c = corte.split(" ")[0]
+                dir_SIP_c = mensaje_rx.split(":")[1] + ":" + puerto_c
                 # RECIBIDO register
                 proxy.add_log(mensaje_rx, ip_c, puerto_c, 1, 0)
 
@@ -178,11 +213,6 @@ class UDP_Server(socketserver.DatagramRequestHandler):
 
             elif tipo_mensaje == "INVITE":
                 # RECIBIDO INVITE
-                # extraigo dir_SIP_destino
-                dir_SIP_dest = mensaje_rx.split(" ")[1]
-                ip_dest = dir_SIP_dest.split("@")[1]
-                ip_dest = ip_dest.split(":")[0]
-                puerto_dest = dir_SIP_dest.split(":")[2]
                 # extraigo ip y puerto origen del INVITE
                 corte = mensaje_rx.split("o=")[1]
                 corte = corte.split("s")[0]
@@ -190,61 +220,41 @@ class UDP_Server(socketserver.DatagramRequestHandler):
                 ip_o = ip_puerto.split(":")[0]
                 puerto_o = ip_puerto.split(":")[1][:-1]
                 proxy.add_log(mensaje_rx, ip_o, puerto_o, 1, 0)
-                # debo enviar al uaserver deseado
-                mensaje_tx = mensaje_rx
-                proxy.send_to_uaserver(mensaje_tx, ip_dest, puerto_dest)
-                proxy.add_log(mensaje_tx, ip_dest, puerto_dest, 0, 0)
 
-                # espero a recibir confirmacion del INVITE
+                # envio el invite al uaserver y espero su respuesta
+                respuesta = proxy.send_to_uaserver(mensaje_rx, ip_dest, puerto_dest)
 
+                # enviamos la confirmacion al uaclient
+                self.wfile.write(respuesta)
+                proxy.add_log(respuesta.decode('utf-8'), ip_o, puerto_o, 0, 0)
+
+
+            elif tipo_mensaje == "ACK":
+                # añado al fichero de log mensaje recibido
+                proxy.add_log(mensaje_rx, 0, 0, 1, 1)
+                # reenvio el ACK al uaserver y NO espero la respuesta
+                proxy.ack_to_uaserver(mensaje_rx, ip_dest, puerto_dest)
 
 
             elif tipo_mensaje == "BYE":
-                # extraigo dir_SIP_dest
-                dir_SIP_dest = mensaje_rx.split(":")[1]
-                ip_dest = dir_SIP_dest.split("@")[1]
-                puerto_dest = mensaje_rx.split(":")[2]
-                puerto_dest = puerto_dest.split(" ")[0]
-                # extraigo ip y puerto origen del INVITE
-                corte = mensaje_rx.split("o=")[1]
-                corte = corte.split("s")[0]
-                ip_puerto = corte.split("@")[1]
-                ip_o = ip_puerto.split(":")[0]
-                puerto_o = ip_puerto.split(":")[1]
-                proxy.add_log(mensaje_rx, ip_o, puerto_o, 1, 0)
-                # debo enviar al uaserver deseado
-                mensaje_tx = mensaje_rx
-                proxy.send_to_uaserver(mensaje_tx, ip_dest, puerto_dest)
-                proxy.add_log(mensaje_tx, ip_dest, puerto_dest, 0, 0)
+                # añado al fichero de log mensaje recibido
+                proxy.add_log(mensaje_rx, 0, 0, 1, 1)
+                # reenvio el ACK al uaserver y espero la respuesta
+                respuesta = proxy.send_to_uaserver(mensaje_rx, ip_dest, puerto_dest)
+                # enviamos la confirmacion al uaclient
+                self.wfile.write(respuesta)
+                confirmacion = "Received confirmation " + respuesta.decode('utf-8')
+                proxy.add_log(confirmacion, 0, 0, 0, 1)
 
 
+            # mensaje distinto de: REGISTER, INVITE, BYE, ACK
             else:
 
-                if "200 OK" in mensaje_rx:
-
-                    print("*Recibido 200 OK")
-                    # recibida confirmacion del destinatario del INVITE
-                    proxy.add_log(mensaje_rx, 0, 0, 0, 1)
-                    # extraigo info del nuevo destinatario
-                    dir_SIP_dest = mensaje_rx.split("d=")[1]
-                    dir_SIP_dest = dir_SIP_dest.split("s=")[0][:-1]
-                    ip_puerto = dir_SIP_dest.split("@")[1]
-                    ip_dest = ip_puerto.split(":")[0]
-                    puerto_dest = ip_puerto.split(":")[1]
-
-                    # reenvio en 200 OK al uaclient que envió el INVITE
-                    proxy.send_to_uaserver(mensaje_rx, ip_dest, puerto_dest)
-                    #self.wfile.write(bytes(mensaje_rx, 'utf-8'))
-                    proxy.add_log(mensaje_rx, ip_dest, puerto_dest, 0, 0)
-
-                else:
-                    respuesta = "SIP/2.0 405 Method Not Allowed\r\n\r\n"
-                    self.wfile.write(bytes(respuesta, 'utf-8'))
-                    # ENVIO mensaje
-                    proxy.add_log(respuesta, ip_c, puerto_c, 0, 0)
-
-
-
+                respuesta = "SIP/2.0 405 Method Not Allowed\r\n\r\n"
+                # ENVIO mensaje
+                self.wfile.write(bytes(respuesta, 'utf-8'))
+                print("Escrito en wfile: " + respuesta)
+                proxy.add_log(respuesta, ip_c, puerto_c, 0, 0)
 
 
 
