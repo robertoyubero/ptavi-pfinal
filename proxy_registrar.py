@@ -237,14 +237,21 @@ class UDP_Server(socketserver.DatagramRequestHandler):
             elif tipo_mensaje == "BYE":
                 # añado al fichero de log mensaje recibido
                 proxy.add_log(mensaje_rx, 0, 0, 1, 1)
-                # reenvio el ACK al uaserver y espero la respuesta
-                respuesta = proxy.send_to_uaserver(mensaje_rx, ip_dest,
-                                                   puerto_dest)
-                # enviamos la confirmacion al uaclient
-                self.wfile.write(respuesta)
-                respuesta = respuesta.decode('utf-8')
-                confirmacion = "Received confirmation " + respuesta
-                proxy.add_log(confirmacion, 0, 0, 0, 1)
+                try:
+                    # reenvio el ACK al uaserver y espero la respuesta
+                    respuesta = proxy.send_to_uaserver(mensaje_rx, ip_dest,
+                                                       puerto_dest)
+                    # enviamos la confirmacion al uaclient
+                    self.wfile.write(respuesta)
+                    respuesta = respuesta.decode('utf-8')
+                    confirmacion = "Received confirmation " + respuesta
+                    proxy.add_log(confirmacion, 0, 0, 0, 1)
+                except ConnectionRefusedError:
+                    # el destino no esta registrado
+                    respuesta = "SIP/2.0 404 User Not Found:" + dir_SIP_dest
+                    # enviamos la confirmacion al uaclient
+                    self.wfile.write(bytes(respuesta, 'utf-8'))
+                    proxy.add_log(respuesta, 0, 0, 0, 1)    
 
             # mensaje distinto de: REGISTER, INVITE, BYE, ACK
             else:
