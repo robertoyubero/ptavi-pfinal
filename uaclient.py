@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+# !/usr/bin/python3
 # -*- coding: utf-8 -*-
 """
 Programa cliente que abre un socket a un servidor
@@ -19,7 +19,7 @@ def get_configuracion(fichero):
     tree = ET.parse(fichero)
     root = tree.getroot()
     for child in root:
-        clave =child.tag
+        clave = child.tag
         valor = child.attrib
         dicc[clave] = valor
     return dicc
@@ -66,7 +66,6 @@ class Cliente():
         fich = open(path, "a")
         fich.write(hora + ' ' + log_contenido[0] + "\n")
 
-
     def send_RTP(self, dir_SIP_dest):
         """
         Gestion del envio de paquetes RTP: envio el paquete al cliente
@@ -84,7 +83,6 @@ class Cliente():
         os.system(paquete_RTP)
 
 
-
 if __name__ == "__main__":
 
     cliente = Cliente()
@@ -96,7 +94,6 @@ if __name__ == "__main__":
     my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     my_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     my_socket.connect((ip_proxy, int(puerto_proxy)))
-
 
     # formo la peticion SIP
     user = DIC_CONFIG['account']['username']
@@ -131,8 +128,8 @@ if __name__ == "__main__":
                 mc = hashlib.md5()
                 mc.update(bytes(passwd, 'utf-8') + bytes(nonce, 'utf-8'))
                 response = mc.hexdigest()
-                respuesta = METODO + ' sip:' + dir_SIP_c + ' SIP/2.0' + '\r\n' + t_exp
-                respuesta += '\r\nAuthorization: response="' + response
+                respuesta = METODO + ' sip:' + dir_SIP_c + ' SIP/2.0' + '\r\n'
+                respuesta += t_exp + '\r\nAuthorization: response="' + response
                 respuesta += '" nonce="' + nonce + '"'
                 my_socket.send(bytes(respuesta, 'utf-8'))
                 # ENVIADA respuesta
@@ -150,7 +147,7 @@ if __name__ == "__main__":
                 cliente.add(otros, 0, 0, 0, 1)
                 my_socket.close()
 
-            #espero a recibir la SEGUNDA respuesta del REGISTER
+            # espero a recibir la SEGUNDA respuesta del REGISTER
             respuesta = my_socket.recv(1024)
             respuesta = respuesta.decode('utf-8')
             codigo = int(respuesta.split('SIP/2.0 ')[-1][0:3])
@@ -173,9 +170,7 @@ if __name__ == "__main__":
             otros += puerto_proxy
             cliente.add_log(otros, 0, 0, 0, 1)
 
-
     elif METODO == "INVITE":
-
 
         dir_SIP_dest = OPCION
         puerto_c_RTP = DIC_CONFIG['rtpaudio']['puerto']
@@ -196,18 +191,19 @@ if __name__ == "__main__":
         # si recibo 200 OK envio ACK y audio con RTP
         if "200 OK" in respuesta:
             # envio ACK
-            peticion = "ACK sip:" + dir_SIP_dest +" SIP/2.0"
+            peticion = "ACK sip:" + dir_SIP_dest + " SIP/2.0"
             my_socket.send(bytes(peticion, 'utf-8'))
             cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
             # envio RTP
             print("...Enviar RTP...")
 
         else:
-            print("Recibida respuesta eeronea al INVITE: " + respuesta)
+            # respuesta errónea
+            cliente.add_log(respuesta, 0, 0, 0, 1)
 
     elif METODO == "BYE":
         # envio BYE y espero confirmacion
-        peticion = "BYE sip:" + OPCION +" SIP/2.0"
+        peticion = "BYE sip:" + OPCION + " SIP/2.0"
         my_socket.send(bytes(peticion, 'utf-8'))
         cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
         # espero la respuesta del proxy
@@ -219,7 +215,6 @@ if __name__ == "__main__":
         fin = "Conection Finished with: " + usuario
         cliente.add_log(fin, 0, 0, 0, 1)
 
-
     else:
         peticion = (METODO + ' sip:' + dir_SIP_c + ' SIP/2.0' + '\r\n')
         my_socket.send(bytes(peticion, 'utf-8'))
@@ -230,29 +225,4 @@ if __name__ == "__main__":
         cliente.add_log(respuesta, 0, 0, 0, 1)
         my_socket.close()
 
-
     my_socket.close()
-
-
-
-    """
-if METODO == "BYE":
-
-
-    # tras el envio RTP envio el BYE
-    print("\n")
-    dir_SIP_dest = OPCION
-    peticion = (METODO + ' sip:' + dir_SIP_dest + ' SIP/2.0' + '\r\n\r\n')
-    peticion += "o=" + dir_SIP_c
-    # envio el BYE
-    my_socket.send(bytes(peticion, 'utf-8'))
-    print("9")
-    cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
-    # espero a recibir la respuesta del BYE
-    respuesta = my_socket.recv(1024)
-    respuesta = respuesta.decode('utf-8')
-    # si 200ok => Fin
-    # else => reenvio BYE
-    """
-
-    # Cerramos todo
