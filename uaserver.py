@@ -140,6 +140,7 @@ if __name__ == "__main__":
     puerto_server = DIC_CONFIG['uaserver']['puerto']
     # Nos atamos a puerto de uaserver
     serv = socketserver.UDPServer((ip_server, int(puerto_server)), EchoHandler)
-    otros = "Listening...\n"
+    otros = "Listening..."
     uaserver.add_log(otros, 0, 0, 0, 1)
+    print("\n")
     serv.serve_forever()
