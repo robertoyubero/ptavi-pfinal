@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+	<server name="MyServer" ip="127.0.0.1" puerto="8888" />
+	<database path= "/home/al-12-13/ryubero/ptavi-pfinal/database.txt" passwdpath="/home/al-12-13/ryubero/ptavi-pfinal/passwords.txt"/>
+	<log path="/home/al-12-13/ryubero/ptavi-pfinal/log_pr.txt" />
+</config>
