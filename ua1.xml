@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+	<account username="froning" passwd="muscles"/>
+	<uaserver ip= "127.0.0.1" puerto="6666"/>
+	<rtpaudio puerto="6000"/>
+	<regproxy ip="127.0.0.1" puerto= "8888" />
+	<log path="/home/al-12-13/ryubero/ptavi-pfinal/log_ua.txt" />
+	<audio path="/home/al-12-13/ryubero/ptavi-pfinal/cancion.mp3" />
+</config>
