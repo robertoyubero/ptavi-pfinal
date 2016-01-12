@@ -251,11 +251,10 @@ class UDP_Server(socketserver.DatagramRequestHandler):
                     respuesta = "SIP/2.0 404 User Not Found:" + dir_SIP_dest
                     # enviamos la confirmacion al uaclient
                     self.wfile.write(bytes(respuesta, 'utf-8'))
-                    proxy.add_log(respuesta, 0, 0, 0, 1)    
+                    proxy.add_log(respuesta, 0, 0, 0, 1)
 
             # mensaje distinto de: REGISTER, INVITE, BYE, ACK
             else:
-
                 respuesta = "SIP/2.0 405 Method Not Allowed\r\n\r\n"
                 # ENVIO mensaje
                 self.wfile.write(bytes(respuesta, 'utf-8'))
