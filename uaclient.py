@@ -9,6 +9,7 @@ import sys
 import xml.etree.ElementTree as ET
 import time
 import hashlib
+import os
 
 
 def get_configuracion(fichero):
@@ -66,20 +67,21 @@ class Cliente():
         fich = open(path, "a")
         fich.write(hora + ' ' + log_contenido[0] + "\n")
 
-    def send_RTP(self, dir_SIP_dest):
+    def send_RTP(self, dir_SIP_dest, p_RTP_dest):
         """
         Gestion del envio de paquetes RTP: envio el paquete al cliente
         """
         ip_puerto = dir_SIP_dest.split("@")[1]
         ip = dir_SIP_dest.split(":")[0]
         ip = ip.split("@")[1]
-        puerto = dir_SIP_dest.split(":")[1]
         audio = DIC_CONFIG['audio']['path']
+        audio = audio.split("/")[-1]
 
+        mensaje_rtp = "Enviando paquete RTP a " + ip + " " + p_RTP_dest + "\n"
+        self.add_log(mensaje_rtp, 0, 0, 0, 1)
         # envio RTP
-        paquete_RTP = ('./mp32rtp -i ' + ip + ' -p ' + puerto + ' < '
+        paquete_RTP = ('./mp32rtp -i ' + ip + ' -p ' + p_RTP_dest + ' < '
                        + audio)
-        print("Enviando paquete RTP...\n")
         os.system(paquete_RTP)
 
 
@@ -191,11 +193,13 @@ if __name__ == "__main__":
         # si recibo 200 OK envio ACK y audio con RTP
         if "200 OK" in respuesta:
             # envio ACK
+            puerto_RTP_dest = respuesta.split("m=")[1]
+            puerto_RTP_dest = puerto_RTP_dest.split(" ")[1]
             peticion = "ACK sip:" + dir_SIP_dest + " SIP/2.0"
             my_socket.send(bytes(peticion, 'utf-8'))
             cliente.add_log(peticion, ip_proxy, puerto_proxy, 0, 0)
             # envio RTP
-            print("...Enviar RTP...")
+            cliente.send_RTP(dir_SIP_dest, puerto_RTP_dest)
 
         else:
             # respuesta errónea
@@ -217,7 +221,7 @@ if __name__ == "__main__":
             cliente.add_log(fin, 0, 0, 0, 1)
         else:
             # respuesta errónea
-            cliente.add_log(respuesta, 0, 0, 0, 1)    
+            cliente.add_log(respuesta, 0, 0, 0, 1)
 
     else:
         peticion = (METODO + ' sip:' + dir_SIP_c + ' SIP/2.0' + '\r\n')
