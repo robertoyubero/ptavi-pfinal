@@ -25,6 +25,8 @@ def get_configuracion(fichero):
     return dicc
 
 # comprobamos la entrada por teclado
+DIR_DEST_RTP = ""
+PUERTO_DEST_RTP = ""
 try:
     if len(sys.argv) != 2:
         raise IndexError
@@ -59,6 +61,21 @@ class UA_Server():
         fich = open(path, "a")
         fich.write(hora + ' ' + log_contenido[0] + "\n")
 
+    def send_RTP(self, dir_SIP_dest, p_RTP_dest):
+        """
+        Gestion del envio de paquetes RTP: envio el paquete al cliente
+        """
+        ip = dir_SIP_dest
+        audio = DIC_CONFIG['audio']['path']
+        audio = audio.split("/")[-1]
+
+        mensaje_rtp = "Enviando paquete RTP a " + ip + " " + p_RTP_dest + "\n"
+        self.add_log(mensaje_rtp, 0, 0, 0, 1)
+        # envio RTP
+        paquete_RTP = ('./mp32rtp -i ' + ip + ' -p ' + p_RTP_dest + ' < '
+                       + audio)
+        os.system(paquete_RTP)
+
 
 class EchoHandler(socketserver.DatagramRequestHandler):
     """
@@ -73,8 +90,9 @@ class EchoHandler(socketserver.DatagramRequestHandler):
         my_name = DIC_CONFIG['account']['username']
         my_dir_SIP = my_name + "@" + my_ip + ":" + my_puerto
         server = UA_Server()
-        while 1:
+        global PUERTO_DEST_RTP
 
+        while 1:
             line = self.rfile.read()
             # controlamos el mensaje que se reenvia vacio
             if not line:
@@ -84,6 +102,9 @@ class EchoHandler(socketserver.DatagramRequestHandler):
             METODO = mensaje_rx.split(" ")[0]
 
             if METODO == "INVITE":
+                # extraigo el puerto RTP para el envio
+                puerto_dest = mensaje_rx.split("m=")[1]
+                PUERTO_DEST_RTP = puerto_dest.split(" ")[1]
                 server.add_log(mensaje_rx, ip_proxy, puerto_proxy, 1, 0)
                 # envio 200 ok al proxy
                 dir_SIP_o = mensaje_rx.split(" ")[1]
@@ -118,8 +139,11 @@ class EchoHandler(socketserver.DatagramRequestHandler):
                 server.add_log(fin, 0, 0, 0, 1)
 
             elif METODO == "ACK":
+                dir_sip_dest = mensaje_rx.split(":")[1]
                 server.add_log(mensaje_rx, ip_proxy, puerto_proxy, 1, 0)
-                print("...Waiting audio by RTP")
+                mensaje_rtp = "Sending RTP to " + dir_sip_dest + ":"
+                mensaje_rtp += PUERTO_DEST_RTP
+                server.send_RTP(dir_sip_dest, PUERTO_DEST_RTP)
 
             else:
                 print("Recibido mensaje no esperado: " + mensaje_rx)
